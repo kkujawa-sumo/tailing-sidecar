@@ -1,0 +1,3 @@
+domain: sumologic.com
+repo: github.com/SumoLogic/sumologic-tailing-sidecar/operator
+version: "2"
