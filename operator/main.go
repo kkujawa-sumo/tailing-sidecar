@@ -25,6 +25,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	tailingsidecarv1 "github.com/SumoLogic/sumologic-tailing-sidecar/operator/api/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -36,6 +38,7 @@ var (
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
+	_ = tailingsidecarv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

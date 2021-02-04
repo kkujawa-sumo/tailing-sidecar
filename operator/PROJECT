@@ -1,3 +1,7 @@
 domain: sumologic.com
 repo: github.com/SumoLogic/sumologic-tailing-sidecar/operator
+resources:
+- group: tailing-sidecar
+  kind: TailingSidecar
+  version: v1
 version: "2"
