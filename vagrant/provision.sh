@@ -27,6 +27,7 @@ ufw default allow routed
 microk8s enable registry
 microk8s enable storage
 microk8s enable dns
+microk8s enable ingress
 
 microk8s.kubectl config view --raw > /tailing-sidecar/.kube-config
 
