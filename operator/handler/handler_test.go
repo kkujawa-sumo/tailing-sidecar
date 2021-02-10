@@ -18,41 +18,68 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	tailingsidecarv1 "github.com/SumoLogic/tailing-sidecar/operator/api/v1"
 	admv1 "k8s.io/api/admission/v1beta1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	"k8s.io/apimachinery/pkg/runtime"
-	testclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 func TestPodExtender(t *testing.T) {
 	RegisterFailHandler(Fail)
-
 	RunSpecs(t, "PodExtender Suite")
 }
 
-var _ = Describe("PodExtender", func() {
+var _ = Describe("handler", func() {
+	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
 
-	Context("PodExtender Handler", func() {
+	Context("PodExtender.Handle", func() {
+		testEnv := &envtest.Environment{
+			CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
+		}
+		cfg, err := testEnv.Start()
+		It("", func() {
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+		})
 
-		decoder, err := admission.NewDecoder(runtime.NewScheme())
+		err = tailingsidecarv1.AddToScheme(scheme.Scheme)
+		It("", func() {
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		k8sClient, clientErr := client.New(cfg, client.Options{Scheme: scheme.Scheme})
+		It("", func() {
+			Expect(clientErr).ToNot(HaveOccurred())
+		})
+
+		decoder, err := admission.NewDecoder(scheme.Scheme)
 		It("creates decoder without any errors", func() {
 			Expect(err).To(BeNil())
 
 		})
 
 		podExtender := PodExtender{
-			Client:              testclient.NewFakeClient(),
+			Client:              k8sClient,
 			TailingSidecarImage: "tailing-sidecar-image:test",
 			decoder:             decoder,
 		}
 
-		When("When request does not contain any object", func() {
+		When("request does not contain any object", func() {
 			request := admission.Request{
 				AdmissionRequest: admv1.AdmissionRequest{
 					Operation: admv1.Create,
@@ -65,12 +92,13 @@ var _ = Describe("PodExtender", func() {
 			resp := podExtender.Handle(context.Background(), request)
 			It("rejects request as decoder returns an error", func() {
 				Expect(resp.Allowed).To(BeFalse())
-				Expect(resp.Patch).To(BeEmpty())
 				Expect(resp.Result.Code).Should(Equal(int32(http.StatusBadRequest)))
+				s, _ := json.MarshalIndent(resp.Patches, "", "\t")
+				fmt.Printf("patch: %+v\n", string(s))
 			})
 		})
 
-		When("When request contains empty json", func() {
+		When("request contains empty json", func() {
 			request := admission.Request{
 				AdmissionRequest: admv1.AdmissionRequest{
 					Operation: admv1.Create,
@@ -84,11 +112,12 @@ var _ = Describe("PodExtender", func() {
 
 			It("returns empty patch as extendPod function didn't find tailing-sidecar annotation", func() {
 				Expect(resp.Allowed).To(BeTrue())
-				Expect(resp.Patch).To(BeEmpty())
+				s, _ := json.MarshalIndent(resp.Patches, "", "\t")
+				fmt.Printf("patch: %+v\n", string(s))
 			})
 		})
 
-		When("When Pod with null metadata is created", func() {
+		When("Pod with null metadata is created", func() {
 			request := admission.Request{
 				AdmissionRequest: admv1.AdmissionRequest{
 					Operation: admv1.Create,
@@ -111,16 +140,17 @@ var _ = Describe("PodExtender", func() {
 			}
 
 			resp := podExtender.Handle(context.Background(), request)
-			It("eturns empty patch as extendPod function didn't find tailing-sidecar annotation", func() {
+			It("returns empty patch as extendPod function didn't find tailing-sidecar annotation", func() {
 				Expect(resp.Allowed).To(BeTrue())
-				Expect(resp.Patch).To(BeEmpty())
+				// s, _ := json.MarshalIndent(resp.Patches, "", "\t")
+				// fmt.Printf("patch: %+v\n", string(s))
 			})
 		})
 
-		When("When Pod with empty metadata is created", func() {
+		When("Pod with empty metadata is created", func() {
 			request := admission.Request{
 				AdmissionRequest: admv1.AdmissionRequest{
-					Operation: admv1.Update,
+					Operation: admv1.Create,
 					Object: runtime.RawExtension{
 						Raw: []byte(`{
 									"apiVersion": "v1",
@@ -146,14 +176,16 @@ var _ = Describe("PodExtender", func() {
 			resp := podExtender.Handle(context.Background(), request)
 			It("returns empty patch as extendPod function didn't find tailing-sidecar annotation", func() {
 				Expect(resp.Allowed).To(BeTrue())
-				Expect(resp.Patch).To(BeEmpty())
+				// Expect(resp.Patches).To(BeEmpty())
+				// s, _ := json.MarshalIndent(resp.Patches, "", "\t")
+				// fmt.Printf("patch: %+v\n", string(s))
 			})
 		})
 
-		When("When Pod with empty annotation is created", func() {
+		When("Pod with empty annotation is created", func() {
 			request := admission.Request{
 				AdmissionRequest: admv1.AdmissionRequest{
-					Operation: admv1.Update,
+					Operation: admv1.Create,
 					Object: runtime.RawExtension{
 						Raw: []byte(`{
 									"apiVersion": "v1",
@@ -178,14 +210,16 @@ var _ = Describe("PodExtender", func() {
 			resp := podExtender.Handle(context.Background(), request)
 			It("returns empty patch as extendPod function didn't find tailing-sidecar annotation", func() {
 				Expect(resp.Allowed).To(BeTrue())
-				Expect(resp.Patch).To(BeEmpty())
+				// Expect(resp.Patches).To(BeEmpty())
+				// s, _ := json.MarshalIndent(resp.Patches, "", "\t")
+				// fmt.Printf("patch: %+v\n", string(s))
 			})
 		})
 
-		When("When Pod with null annotation is created", func() {
+		When("Pod with null annotation is created", func() {
 			request := admission.Request{
 				AdmissionRequest: admv1.AdmissionRequest{
-					Operation: admv1.Update,
+					Operation: admv1.Create,
 					Object: runtime.RawExtension{
 						Raw: []byte(`{
 									"apiVersion": "v1",
@@ -210,7 +244,74 @@ var _ = Describe("PodExtender", func() {
 			resp := podExtender.Handle(context.Background(), request)
 			It("returns empty patch as extendPod function didn't find tailing-sidecar annotation", func() {
 				Expect(resp.Allowed).To(BeTrue())
-				Expect(resp.Patch).To(BeEmpty())
+				// s, _ := json.MarshalIndent(resp.Patches, "", "\t")
+				// fmt.Printf("patch: %+v\n", string(s))
+			})
+		})
+
+		When("Pod with correct configuration is created", func() {
+			request := admission.Request{
+				AdmissionRequest: admv1.AdmissionRequest{
+					Operation: admv1.Create,
+					Object: runtime.RawExtension{
+						Raw: []byte(`{
+							"apiVersion": "v1",
+							"kind": "Pod",
+							"metadata": {
+							  "name": "pod-with-annotations",
+							  "namespace": "tailing-sidecar-system",
+							  "annotations": {
+								"tailing-sidecar": "varlog:/var/log/example0.log;varlog:/var/log/example1.log"
+							  }
+							},
+							"spec": {
+							  "containers": [
+								{
+								  "name": "count",
+								  "image": "busybox",
+								  "args": [
+									"/bin/sh",
+									"-c",
+									"i=0; while true; do\n  echo \"example0: $i $(date)\" >> /var/log/example0.log;\n  echo \"example1: $i $(date)\" >> /var/log/example1.log;\n  echo \"example2: $i $(date)\" >> /varconfig/log/example2.log;\n  i=$((i+1));\n  sleep 1;\ndone\n"
+								  ],
+								  "volumeMounts": [
+									{
+									  "name": "varlog",
+									  "mountPath": "/var/log"
+									},
+									{
+									  "name": "varlogconfig",
+									  "mountPath": "/varconfig/log"
+									}
+								  ]
+								}
+							  ],
+							  "volumes": [
+								{
+								  "name": "varlog",
+								  "emptyDir": {}
+								},
+								{
+								  "name": "varlogconfig",
+								  "emptyDir": {}
+								}
+							  ]
+							}
+						  }`),
+					},
+				},
+			}
+
+			resp := podExtender.Handle(context.Background(), request)
+			It("returns patch with tailing sidecar containers", func() {
+				Expect(resp.Allowed).To(BeTrue())
+				Expect(resp.Patches).NotTo(BeEmpty())
+				//nodesJSON, err := json.Marshal(nodes)
+				//assert.Nil(t, err)
+				//assert.JSONEq(t, expectedNodes, string(nodesJSON))
+				// s, _ := json.MarshalIndent(resp, "", "\t")
+				// fmt.Printf("patch: %+v\n", string(s))
+				//fmt.Println("HTTP code:", resp.Result.Code)
 			})
 		})
 	})

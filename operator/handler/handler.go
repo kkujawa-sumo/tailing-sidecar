@@ -75,6 +75,9 @@ func (e *PodExtender) Handle(ctx context.Context, req admission.Request) admissi
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
+	//s, _ := json.MarshalIndent(pod, "", "\t")
+	//fmt.Printf("patch: %+v\n", string(s))
+
 	marshaledPod, err := json.Marshal(pod)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
